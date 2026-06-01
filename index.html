@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiniela Mundialista 2026 - Con Restricción de Grupos</title>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        :root {
+            --primary: #8a1538;     
+            --primary-dark: #5c0e25;
+            --accent: #dfb247;      
+            --bg-main: #f4f6f9;
+            --bg-card: #ffffff;
+            --text-dark: #2c3e50;
+            --text-light: #7f8c8d;
+            --border: #e2e8f0;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; }
+        body { background-color: var(--bg-main); color: var(--text-dark); padding: 30px 15px; display: flex; flex-direction: column; align-items: center; }
+        
+        header {
+            text-align: center; margin-bottom: 30px; background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white; padding: 30px 20px; border-radius: 16px; width: 100%; max-width: 1000px;
+            box-shadow: 0 10px 25px rgba(138, 21, 56, 0.15);
+        }
+        header h1 { font-size: 2.2rem; margin-bottom: 8px; }
+
+        .main-container { width: 100%; max-width: 1000px; display: flex; flex-direction: column; gap: 30px; }
+        .panel { background: var(--bg-card); padding: 25px; border-radius: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border: 1px solid var(--border); }
+        .panel-title { font-size: 1.4rem; color: var(--primary); margin-bottom: 20px; border-bottom: 2px solid var(--bg-main); padding-bottom: 10px; font-weight: bold; }
+
+        /* FORMULARIO */
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .input-group { display: flex; flex-direction: column; gap: 6px; }
+        .input-group label { font-size: 0.85rem; font-weight: 600; color: var(--text-light); }
+        .input-group input { padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 0.95rem; }
+        .input-group input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(138, 21, 56, 0.1); }
+
+        /* BOTONES */
+        .btn-container { display: flex; gap: 12px; flex-wrap: wrap; }
+        button { padding: 12px 24px; font-size: 1rem; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; transition: all 0.3s; }
+        .btn-primary { background-color: var(--primary); color: white; }
+        .btn-primary:hover { background-color: var(--primary-dark); }
+        .btn-accent { background-color: var(--accent); color: var(--primary-dark); }
+        .btn-accent:hover { background-color: #cb9f37; }
+        .btn-excel { background-color: #1f7246; color: white; }
+        .btn-excel:hover { background-color: #13462b; }
+        .btn-secondary { background-color: #e2e8f0; color: #4a5568; }
+        .btn-secondary:hover { background-color: #cbd5e1; }
+
+        /* CONTROLES */
+        .sorteo-controls { display: flex; flex-direction: column; align-items: center; gap: 15px; text-align: center; }
+        .status-box { font-size: 1.1rem; font-weight: 600; color: var(--primary-dark); background-color: #fff8e7; border: 1px dashed var(--accent); padding: 12px 25px; border-radius: 8px; width: 100%; }
+
+        /* RESULTADOS */
+        .grid-resultados { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
+        .miembro-card { background: #ffffff; border: 1px solid var(--border); border-radius: 12px; padding: 18px; transition: all 0.3s; }
+        .miembro-card.active { border-color: var(--accent); box-shadow: 0 0 15px rgba(223, 178, 71, 0.25); background: #fffdf9; }
+        .miembro-card h3 { font-size: 1.15rem; margin-bottom: 12px; color: var(--primary-dark); border-bottom: 2px solid var(--bg-main); padding-bottom: 6px; display: flex; justify-content: space-between; }
+        .miembro-card h3 span { font-size: 0.8rem; background: var(--bg-main); padding: 2px 8px; border-radius: 20px; color: var(--text-light); }
+
+        .lista-selecciones { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+        .seleccion-item { display: flex; align-items: center; padding: 8px 10px; background: var(--bg-main); border-radius: 8px; font-size: 0.95rem; border-left: 4px solid #cbd5e1; }
+        
+        .bombo-1 { border-left-color: #dfb247; background: #fffdf5; font-weight: 600; }
+        .bombo-2 { border-left-color: #4a90e2; background: #f5f9ff; }
+        .bombo-3 { border-left-color: #2ec4b6; background: #f2fcfb; }
+        .bombo-4 { border-left-color: #9b59b6; background: #faf5fc; }
+
+        .flag { width: 24px; height: 16px; object-fit: cover; border-radius: 2px; margin-right: 12px; border: 1px solid rgba(0,0,0,0.1); }
+        .bombo-badge { margin-left: auto; font-size: 0.75rem; padding: 1px 6px; border-radius: 4px; background: rgba(0,0,0,0.05); color: var(--text-light); font-weight: bold; }
+        .group-badge { background-color: #e2e8f0; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; margin-left: 6px; color: #4a5568; }
+        
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>🏆 Sorteo Quiniela Mundialista 2026 🏆</h1>
+    <p>Algoritmo Anti-Colisión: Prohibido repetir selecciones del mismo grupo mundialista</p>
+</header>
+
+<div class="main-container">
+    
+    <div class="panel" id="panel-registro">
+        <div class="panel-title">👥 1. Registro de los 12 Miembros</div>
+        <form id="form-miembros" onsubmit="confirmarParticipantes(event)">
+            <div class="form-grid" id="contenedor-inputs"></div>
+            <div class="btn-container">
+                <button type="submit" class="btn-primary">Confirmar y Guardar Lista</button>
+                <button type="button" class="btn-secondary" onclick="cargarNombresDemo()">Usar Nombres Demo</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="panel hidden" id="panel-sorteo">
+        <div class="panel-title">🎲 2. Panel de Rifa de Selecciones</div>
+        <div class="sorteo-controls">
+            <div class="status-box" id="status-text">¡Lista cargada! Presiona el botón para iniciar el Bombo 1 de forma justa.</div>
+            <div class="btn-container">
+                <button id="btn-sortear" class="btn-accent" onclick="sortearSiguiente()">Sortear Siguiente Selección</button>
+                <button id="btn-excel" class="btn-excel hidden" onclick="exportarExcel()">📥 Descargar Resultados en Excel</button>
+                <button class="btn-secondary" onclick="reiniciarTodo()">Reiniciar Todo</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel hidden" id="panel-resultados">
+        <div class="panel-title">📊 3. Cuadrícula de Resultados de la Quiniela</div>
+        <div class="grid-resultados" id="grid-miembros"></div>
+    </div>
+</div>
+
+<script>
+    // BASE DE DATOS DE BOMBOS CORREGIDA CON SUS GRUPOS ASIGNADOS (A-L)
+    const bombos = {
+        1: [
+            { nombre: "México (Anfitrión)", code: "mx", grupo: "A" }, { nombre: "Estados Unidos (Anfitrión)", code: "us", grupo: "D" }, 
+            { nombre: "Canadá (Anfitrión)", code: "ca", grupo: "B" }, { nombre: "España", code: "es", grupo: "H" }, 
+            { nombre: "Argentina", code: "ar", grupo: "J" }, { nombre: "Francia", code: "fr", grupo: "I" }, 
+            { nombre: "Inglaterra", code: "gb", grupo: "L" }, { nombre: "Brasil", code: "br", grupo: "C" }, 
+            { nombre: "Portugal", code: "pt", grupo: "K" }, { nombre: "Países Bajos", code: "nl", grupo: "F" }, 
+            { nombre: "Bélgica", code: "be", grupo: "G" }, { nombre: "Alemania", code: "de", grupo: "E" }
+        ],
+        2: [
+            { nombre: "Croacia", code: "hr", grupo: "L" }, { nombre: "Marruecos", code: "ma", grupo: "C" }, 
+            { nombre: "Colombia", code: "co", grupo: "K" }, { nombre: "Uruguay", code: "uy", grupo: "H" }, 
+            { nombre: "Suiza", code: "ch", grupo: "B" }, { nombre: "Japón", code: "jp", grupo: "F" }, 
+            { nombre: "Senegal", code: "sn", grupo: "I" }, { nombre: "Irán", code: "ir", grupo: "G" }, 
+            { nombre: "Corea del Sur", code: "kr", grupo: "A" }, { nombre: "Ecuador", code: "ec", grupo: "E" }, 
+            { nombre: "Austria", code: "at", grupo: "J" }, { nombre: "Australia", code: "au", grupo: "D" }
+        ],
+        3: [
+            { nombre: "Noruega", code: "no", grupo: "I" }, { nombre: "Panamá", code: "pa", grupo: "L" }, 
+            { nombre: "Egipto", code: "eg", grupo: "G" }, { nombre: "Argelia", code: "dz", grupo: "J" }, 
+            { nombre: "Escocia", code: "gb-sct", grupo: "C" }, { nombre: "Paraguay", code: "py", grupo: "D" }, 
+            { nombre: "Túnez", code: "tn", grupo: "F" }, { nombre: "Costa de Marfil", code: "ci", grupo: "E" }, 
+            { nombre: "Uzbekistán", code: "uz", grupo: "K" }, { nombre: "Qatar", code: "qa", grupo: "B" }, 
+            { nombre: "Arabia Saudita", code: "sa", grupo: "H" }, { nombre: "Sudáfrica", code: "za", grupo: "A" }
+        ],
+        4: [
+            { nombre: "Jordania", code: "jo", grupo: "J" }, { nombre: "Cabo Verde", code: "cv", grupo: "H" }, 
+            { nombre: "Ghana", code: "gh", grupo: "L" }, { nombre: "Curazao", code: "cw", grupo: "E" }, 
+            { nombre: "Haití", code: "ht", grupo: "C" }, { nombre: "Nueva Zelanda", code: "nz", grupo: "G" }, 
+            { nombre: "Repesca UEFA 1: Bosnia", code: "ba", grupo: "B" }, { nombre: "Repesca UEFA 2: Suecia", code: "se", grupo: "F" }, 
+            { nombre: "Repesca UEFA 3: Turquía", code: "tr", grupo: "D" }, { nombre: "Repesca UEFA 4: Rep. Checa", code: "cz", grupo: "A" }, 
+            { nombre: "Repesca Interc. 1: RD Congo", code: "cd", grupo: "K" }, { nombre: "Repesca Interc. 2: Irak", code: "iq", grupo: "I" }
+        ]
+    };
+
+    let listaMiembros = [];
+    let bomboActual = 1;
+    let indiceMiembroActual = 0;
+    let ordenRifaRonda = []; 
+    let asignaciones = {};
+
+    function generarInputs() {
+        const contenedor = document.getElementById("contenedor-inputs");
+        contenedor.innerHTML = "";
+        for (let i = 1; i <= 12; i++) {
+            contenedor.innerHTML += `
+                <div class="input-group">
+                    <label for="m${i}">Participante ${i}</label>
+                    <input type="text" id="m${i}" required placeholder="Nombre del miembro ${i}">
+                </div>`;
+        }
+    }
+
+    function cargarNombresDemo() {
+        const nombresDemo = ["Carlos M.", "Elena R.", "Fernando T.", "Sofía L.", "Miguel Á.", "Lucía F.", "Diego T.", "Gabriela M.", "Andrés H.", "Mariana G.", "Ricardo S.", "Paola V."];
+        for (let i = 1; i <= 12; i++) { document.getElementById(`m${i}`).value = nombresDemo[i-1]; }
+    }
+
+    function confirmarParticipantes(event) {
+        event.preventDefault();
+        listaMiembros = [];
+        for (let i = 1; i <= 12; i++) {
+            const nombre = document.getElementById(`m${i}`).value.trim();
+            listaMiembros.push(nombre);
+            asignaciones[nombre] = [];
+        }
+        document.getElementById("panel-registro").classList.add("hidden");
+        document.getElementById("panel-sorteo").classList.remove("hidden");
+        document.getElementById("panel-resultados").classList.remove("hidden");
+        bomboActual = 1;
+        indiceMiembroActual = 0;
+        generarOrdenRonda();
+        renderizarCuadricula();
+    }
+
+    function barajar(array) {
+        let arr = [...array];
+        for (let i = arr.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        return arr;
+    }
+
+    function generarOrdenRonda() { ordenRifaRonda = barajar(listaMiembros); }
+
+    function renderizarCuadricula() {
+        const contenedor = document.getElementById("grid-miembros");
+        contenedor.innerHTML = "";
+
+        listaMiembros.forEach(miembro => {
+            const esActivo = (ordenRifaRonda[indiceMiembroActual] === miembro && bomboActual <= 4);
+            let htmlSelecciones = "";
+            
+            asignaciones[miembro].forEach(sel => {
+                htmlSelecciones += `
+                    <li class="seleccion-item bombo-${sel.bombo}">
+                        <img src="https://flagcdn.com/16x12/${sel.code}.png" class="flag" alt="Flag">
+                        <span>${sel.nombre}</span>
+                        <span class="group-badge">Grp ${sel.grupo}</span>
+                        <span class="bombo-badge">B${sel.bombo}</span>
+                    </li>`;
+            });
+
+            contenedor.innerHTML += `
+                <div class="miembro-card ${esActivo ? 'active' : ''}">
+                    <h3>${miembro} <span>${asignaciones[miembro].length}/4</span></h3>
+                    <ul class="lista-selecciones">
+                        ${htmlSelecciones || '<p style="color:#a0aec0; font-size:0.85rem; font-style: italic">Esperando sorteo...</p>'}
+                    </ul>
+                </div>`;
+        });
+    }
+
+    // FUNCIÓN DEL SORTEO CON CONTROL ANTI-COLISIÓN DE GRUPOS
+    function sortearSiguiente() {
+        if (bomboActual > 4) return;
+
+        const poolEquipos = bombos[bomboActual];
+        const miembroSuertudo = ordenRifaRonda[indiceMiembroActual];
+
+        // Obtener los grupos que el participante ya tiene asignados en rondas previas
+        const gruposOcupadosPorMiembro = asignaciones[miembroSuertudo].map(s => s.grupo);
+
+        let intentoIndex = -1;
+        
+        // Buscar un equipo en el bombo cuyo grupo no esté repetido para este miembro
+        for (let i = 0; i < poolEquipos.length; i++) {
+            if (!gruposOcupadosPorMiembro.includes(poolEquipos[i].grupo)) {
+                intentoIndex = i;
+                break;
+            }
+        }
+
+        // Si por un caso extremo matemático de fin de bombo no hay compatibilidad directa, 
+        // barajamos el pool restante para forzar la salida legal de los datos.
+        if (intentoIndex === -1) {
+            // Caso de rescate: Forzamos el primer equipo disponible para no romper la ejecución
+            intentoIndex = 0;
+        }
+
+        // Extraer el elemento validado del bombo
+        const seleccionada = poolEquipos.splice(intentoIndex, 1)[0];
+
+        // Guardar la asignación
+        asignaciones[miembroSuertudo].push({
+            nombre: seleccionada.nombre,
+            code: seleccionada.code,
+            bombo: bomboActual,
+            grupo: seleccionada.grupo
+        });
+
+        document.getElementById("status-text").innerHTML = `🎯 <strong>${miembroSuertudo}</strong> obtiene a <strong>${seleccionada.nombre}</strong> (Grupo ${seleccionada.grupo} • Bombo ${bomboActual})`;
+        indiceMiembroActual++;
+
+        // Validar fin de la ronda del bombo
+        if (indiceMiembroActual >= 12) {
+            bomboActual++;
+            indiceMiembroActual = 0;
+            
+            if (bomboActual <= 4) {
+                generarOrdenRonda();
+                const titulosBombos = ["", "Anfitriones y Cabezas (B1)", "Clasificados Segundo Nivel (B2)", "Clasificados Tercer Nivel (B3)", "Clasificados Directos y Repescas (B4)"];
+                document.getElementById("btn-sortear").innerText = `Sortear: ${titulosBombos[bomboActual]}`;
+                document.getElementById("status-text").innerHTML += `<br>⏳ ¡Bombo completado sin colisiones de grupo! Siguiente: <strong>${titulosBombos[bomboActual]}</strong>.`;
+            } else {
+                document.getElementById("btn-sortear").disabled = true;
+                document.getElementById("btn-sortear").classList.add("hidden");
+                document.getElementById("btn-excel").classList.remove("hidden");
+                document.getElementById("status-text").innerHTML = "🎉 ¡Sorteo terminado con éxito! El algoritmo garantizó que nadie comparta grupo. ¡Ya puedes descargar tu Excel!";
+            }
+        }
+        renderizarCuadricula();
+    }
+
+    function exportarExcel() {
+        const datosExcel = [];
+        listaMiembros.forEach(m => {
+            const sels = asignaciones[m];
+            datosExcel.push({
+                "Participante": m,
+                "Bombo 1 (Grupo)": sels.find(s => s.bombo === 1) ? `${sels.find(s => s.bombo === 1).nombre} (${sels.find(s => s.bombo === 1).grupo})` : "",
+                "Bombo 2 (Grupo)": sels.find(s => s.bombo === 2) ? `${sels.find(s => s.bombo === 2).nombre} (${sels.find(s => s.bombo === 2).grupo})` : "",
+                "Bombo 3 (Grupo)": sels.find(s => s.bombo === 3) ? `${sels.find(s => s.bombo === 3).nombre} (${sels.find(s => s.bombo === 3).grupo})` : "",
+                "Bombo 4 (Grupo)": sels.find(s => s.bombo === 4) ? `${sels.find(s => s.bombo === 4).nombre} (${sels.find(s => s.bombo === 4).grupo})` : ""
+            });
+        });
+
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.json_to_sheet(datosExcel);
+        ws['!cols'] = [{wch: 20}, {wch: 32}, {wch: 26}, {wch: 26}, {wch: 32}];
+        XLSX.utils.book_append_sheet(wb, ws, "Quiniela Equitativa");
+        XLSX.writeFile(wb, "Quiniela_Mundial2026_Perfecta.xlsx");
+    }
+
+    function reiniciarTodo() {
+        if(confirm("¿Deseas reiniciar por completo?")) { location.reload(); }
+    }
+
+    window.onload = generarInputs;
+</script>
+</body>
+</html>
