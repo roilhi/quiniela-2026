@@ -109,17 +109,17 @@
         <p class="config-hint">
             Define cuántos participantes habrá y cuántas selecciones recibe cada uno.
             El total debe ser exactamente <strong>48 selecciones</strong> (todos los equipos del Mundial).
-            Máximo <strong>12 participantes</strong> y <strong>4 selecciones</strong> por persona (una por bombo).
+            Hay 12 grupos mundialistas (A–L), así que cada participante puede tener máximo <strong>12 selecciones</strong> sin repetir grupo.
         </p>
         <form id="form-config" onsubmit="confirmarConfiguracion(event)">
             <div class="config-grid">
                 <div class="input-group">
                     <label for="num-participantes">Número de participantes</label>
-                    <input type="number" id="num-participantes" min="1" max="12" value="12" required oninput="actualizarResumenConfig()">
+                    <input type="number" id="num-participantes" min="1" max="48" value="12" required oninput="actualizarResumenConfig()">
                 </div>
                 <div class="input-group">
                     <label for="num-selecciones">Selecciones por participante</label>
-                    <input type="number" id="num-selecciones" min="1" max="4" value="4" required oninput="actualizarResumenConfig()">
+                    <input type="number" id="num-selecciones" min="1" max="48" value="4" required oninput="actualizarResumenConfig()">
                 </div>
             </div>
             <div class="config-summary warn" id="config-summary">Total: 48 / 48 selecciones</div>
@@ -197,23 +197,31 @@
     };
 
     const TOTAL_SELECCIONES = 48;
-    const MAX_PARTICIPANTES = 12;
-    const MAX_SELECCIONES_POR_PARTICIPANTE = 4;
+    const MAX_GRUPOS = 12;
+    const NUM_BOMBOS = 4;
+
+    const TITULOS_BOMBOS = ["", "Anfitriones y Cabezas (B1)", "Clasificados Segundo Nivel (B2)", "Clasificados Tercer Nivel (B3)", "Clasificados Directos y Repescas (B4)"];
 
     let config = { numParticipantes: 12, seleccionesPorParticipante: 4 };
     let listaMiembros = [];
-    let bomboActual = 1;
-    let indiceMiembroActual = 0;
-    let ordenRifaRonda = []; 
+    let colaSorteo = [];
+    let indiceSorteo = 0;
     let asignaciones = {};
     let bombosActivos = {};
 
+    function esCombinacionValida(numParticipantes, seleccionesPorParticipante) {
+        return numParticipantes >= 1
+            && seleccionesPorParticipante >= 1
+            && seleccionesPorParticipante <= MAX_GRUPOS
+            && numParticipantes * seleccionesPorParticipante === TOTAL_SELECCIONES;
+    }
+
     function obtenerCombinacionesValidas() {
         const validas = [];
-        for (let p = 1; p <= MAX_PARTICIPANTES; p++) {
-            for (let s = 1; s <= MAX_SELECCIONES_POR_PARTICIPANTE; s++) {
-                if (p * s === TOTAL_SELECCIONES) validas.push({ participantes: p, selecciones: s });
-            }
+        for (let p = 1; p <= TOTAL_SELECCIONES; p++) {
+            if (TOTAL_SELECCIONES % p !== 0) continue;
+            const s = TOTAL_SELECCIONES / p;
+            if (esCombinacionValida(p, s)) validas.push({ participantes: p, selecciones: s });
         }
         return validas;
     }
@@ -223,10 +231,9 @@
         const total = numParticipantes * seleccionesPorParticipante;
 
         if (numParticipantes < 1) errores.push("Debe haber al menos 1 participante.");
-        if (numParticipantes > MAX_PARTICIPANTES) errores.push(`El máximo de participantes es ${MAX_PARTICIPANTES} (equipos disponibles por bombo).`);
         if (seleccionesPorParticipante < 1) errores.push("Cada participante debe recibir al menos 1 selección.");
-        if (seleccionesPorParticipante > MAX_SELECCIONES_POR_PARTICIPANTE) {
-            errores.push(`El máximo de selecciones por participante es ${MAX_SELECCIONES_POR_PARTICIPANTE} (una por cada bombo).`);
+        if (seleccionesPorParticipante > MAX_GRUPOS) {
+            errores.push(`Máximo ${MAX_GRUPOS} selecciones por participante (un equipo por grupo mundialista, A–L).`);
         }
         if (total < TOTAL_SELECCIONES) {
             errores.push(`Faltan ${TOTAL_SELECCIONES - total} selección(es). Total actual: ${total} de ${TOTAL_SELECCIONES}.`);
@@ -258,12 +265,10 @@
             erroresBox.classList.remove("hidden");
             erroresBox.innerHTML = "<strong>Errores de configuración:</strong><ul>" +
                 errores.map(e => `<li>${e}</li>`).join("") + "</ul>";
-            if (total !== TOTAL_SELECCIONES) {
-                const validas = obtenerCombinacionesValidas();
-                erroresBox.innerHTML += "<strong>Combinaciones válidas:</strong><ul>" +
-                    validas.map(c => `<li>${c.participantes} participantes × ${c.selecciones} selecciones = ${TOTAL_SELECCIONES}</li>`).join("") +
-                    "</ul>";
-            }
+            const validas = obtenerCombinacionesValidas();
+            erroresBox.innerHTML += "<strong>Combinaciones válidas:</strong><ul>" +
+                validas.map(c => `<li>${c.participantes} participantes × ${c.selecciones} selecciones = ${TOTAL_SELECCIONES}</li>`).join("") +
+                "</ul>";
         }
     }
 
@@ -288,7 +293,7 @@
 
     function clonarBombos() {
         bombosActivos = {};
-        for (let b = 1; b <= MAX_SELECCIONES_POR_PARTICIPANTE; b++) {
+        for (let b = 1; b <= NUM_BOMBOS; b++) {
             bombosActivos[b] = bombos[b].map(e => ({ ...e }));
         }
     }
@@ -348,12 +353,16 @@
         document.getElementById("panel-registro").classList.add("hidden");
         document.getElementById("panel-sorteo").classList.remove("hidden");
         document.getElementById("panel-resultados").classList.remove("hidden");
-        bomboActual = 1;
-        indiceMiembroActual = 0;
-        generarOrdenRonda();
+        indiceSorteo = 0;
+        generarColaSorteo();
         renderizarCuadricula();
+        document.getElementById("btn-sortear").innerText = "Sortear Siguiente Selección";
+        document.getElementById("btn-sortear").disabled = false;
+        document.getElementById("btn-sortear").classList.remove("hidden");
+        document.getElementById("btn-excel").classList.add("hidden");
+        const primero = colaSorteo[0];
         document.getElementById("status-text").textContent =
-            `¡Lista cargada! ${config.numParticipantes} participantes × ${config.seleccionesPorParticipante} selecciones = ${TOTAL_SELECCIONES}. Presiona el botón para iniciar el Bombo 1.`;
+            `¡Lista cargada! ${config.numParticipantes} participantes × ${config.seleccionesPorParticipante} selecciones = ${TOTAL_SELECCIONES}. Siguiente en sortear: ${primero}.`;
     }
 
     function barajar(array) {
@@ -365,14 +374,32 @@
         return arr;
     }
 
-    function generarOrdenRonda() { ordenRifaRonda = barajar(listaMiembros); }
+    function generarColaSorteo() {
+        colaSorteo = [];
+        for (let r = 0; r < config.seleccionesPorParticipante; r++) {
+            barajar(listaMiembros).forEach(m => colaSorteo.push(m));
+        }
+        colaSorteo = barajar(colaSorteo);
+    }
+
+    function obtenerCandidatosCompatibles(gruposOcupados) {
+        const candidatos = [];
+        for (let b = 1; b <= NUM_BOMBOS; b++) {
+            bombosActivos[b].forEach((equipo, i) => {
+                if (!gruposOcupados.includes(equipo.grupo)) {
+                    candidatos.push({ bombo: b, index: i, equipo });
+                }
+            });
+        }
+        return candidatos;
+    }
 
     function renderizarCuadricula() {
         const contenedor = document.getElementById("grid-miembros");
         contenedor.innerHTML = "";
 
         listaMiembros.forEach(miembro => {
-            const esActivo = (ordenRifaRonda[indiceMiembroActual] === miembro && bomboActual <= config.seleccionesPorParticipante);
+            const esActivo = (colaSorteo[indiceSorteo] === miembro && indiceSorteo < TOTAL_SELECCIONES);
             let htmlSelecciones = "";
             
             asignaciones[miembro].forEach(sel => {
@@ -397,65 +424,58 @@
 
     // FUNCIÓN DEL SORTEO CON CONTROL ANTI-COLISIÓN DE GRUPOS
     function sortearSiguiente() {
-        if (bomboActual > config.seleccionesPorParticipante) return;
+        if (indiceSorteo >= TOTAL_SELECCIONES) return;
 
-        const poolEquipos = bombosActivos[bomboActual];
-        const miembroSuertudo = ordenRifaRonda[indiceMiembroActual];
-
-        if (!poolEquipos || poolEquipos.length === 0) {
-            document.getElementById("status-text").innerHTML =
-                `⚠️ <strong>Error:</strong> No quedan equipos disponibles en el Bombo ${bomboActual}. Sorteo detenido (${contarSeleccionesTotales()}/${TOTAL_SELECCIONES}).`;
-            document.getElementById("btn-sortear").disabled = true;
-            return;
-        }
-
+        const miembroSuertudo = colaSorteo[indiceSorteo];
         const gruposOcupadosPorMiembro = asignaciones[miembroSuertudo].map(s => s.grupo);
+        const numSeleccion = asignaciones[miembroSuertudo].length + 1;
 
-        const candidatos = poolEquipos
-            .map((equipo, i) => ({ equipo, i }))
-            .filter(c => !gruposOcupadosPorMiembro.includes(c.equipo.grupo));
+        let candidatos = obtenerCandidatosCompatibles(gruposOcupadosPorMiembro);
 
-        let intentoIndex;
-        if (candidatos.length > 0) {
-            intentoIndex = candidatos[Math.floor(Math.random() * candidatos.length)].i;
-        } else {
-            intentoIndex = Math.floor(Math.random() * poolEquipos.length);
+        if (candidatos.length === 0) {
+            const restantes = [];
+            for (let b = 1; b <= NUM_BOMBOS; b++) {
+                bombosActivos[b].forEach((equipo, i) => restantes.push({ bombo: b, index: i, equipo }));
+            }
+            if (restantes.length === 0) {
+                document.getElementById("status-text").innerHTML =
+                    `⚠️ <strong>Error:</strong> No quedan equipos disponibles. Sorteo detenido (${contarSeleccionesTotales()}/${TOTAL_SELECCIONES}).`;
+                document.getElementById("btn-sortear").disabled = true;
+                return;
+            }
+            candidatos = restantes;
         }
 
-        const seleccionada = poolEquipos.splice(intentoIndex, 1)[0];
+        const elegido = candidatos[Math.floor(Math.random() * candidatos.length)];
+        const seleccionada = bombosActivos[elegido.bombo].splice(elegido.index, 1)[0];
 
         asignaciones[miembroSuertudo].push({
             nombre: seleccionada.nombre,
             code: seleccionada.code,
-            bombo: bomboActual,
+            bombo: elegido.bombo,
+            ronda: numSeleccion,
             grupo: seleccionada.grupo
         });
 
+        indiceSorteo++;
         const totalActual = contarSeleccionesTotales();
-        document.getElementById("status-text").innerHTML =
-            `🎯 <strong>${miembroSuertudo}</strong> obtiene a <strong>${seleccionada.nombre}</strong> (Grupo ${seleccionada.grupo} • Bombo ${bomboActual})<br>📊 Progreso: <strong>${totalActual}/${TOTAL_SELECCIONES}</strong> selecciones`;
-        indiceMiembroActual++;
+        const siguiente = colaSorteo[indiceSorteo];
+        let statusHtml =
+            `🎯 <strong>${miembroSuertudo}</strong> obtiene a <strong>${seleccionada.nombre}</strong> (Selección ${numSeleccion} • Grupo ${seleccionada.grupo} • ${TITULOS_BOMBOS[elegido.bombo]})<br>📊 Progreso: <strong>${totalActual}/${TOTAL_SELECCIONES}</strong> selecciones`;
 
-        if (indiceMiembroActual >= config.numParticipantes) {
-            bomboActual++;
-            indiceMiembroActual = 0;
-            
-            if (bomboActual <= config.seleccionesPorParticipante) {
-                generarOrdenRonda();
-                const titulosBombos = ["", "Anfitriones y Cabezas (B1)", "Clasificados Segundo Nivel (B2)", "Clasificados Tercer Nivel (B3)", "Clasificados Directos y Repescas (B4)"];
-                document.getElementById("btn-sortear").innerText = `Sortear: ${titulosBombos[bomboActual]}`;
-                document.getElementById("status-text").innerHTML +=
-                    `<br>⏳ ¡Bombo completado sin colisiones de grupo! Siguiente: <strong>${titulosBombos[bomboActual]}</strong>. (${contarSeleccionesTotales()}/${TOTAL_SELECCIONES})`;
-            } else {
-                const validacion = validarSeleccionesCompletas();
-                document.getElementById("btn-sortear").disabled = true;
-                document.getElementById("btn-sortear").classList.add("hidden");
-                if (validacion.ok) {
-                    document.getElementById("btn-excel").classList.remove("hidden");
-                }
-                document.getElementById("status-text").innerHTML = validacion.mensaje;
+        if (indiceSorteo < TOTAL_SELECCIONES) {
+            statusHtml += `<br>⏭️ Siguiente en sortear: <strong>${siguiente}</strong>`;
+        } else {
+            const validacion = validarSeleccionesCompletas();
+            document.getElementById("btn-sortear").disabled = true;
+            document.getElementById("btn-sortear").classList.add("hidden");
+            if (validacion.ok) {
+                document.getElementById("btn-excel").classList.remove("hidden");
             }
+            statusHtml = validacion.mensaje;
         }
+
+        document.getElementById("status-text").innerHTML = statusHtml;
         renderizarCuadricula();
     }
 
@@ -466,14 +486,13 @@
             return;
         }
 
-        const titulosBombos = ["Bombo 1 (Grupo)", "Bombo 2 (Grupo)", "Bombo 3 (Grupo)", "Bombo 4 (Grupo)"];
         const datosExcel = [];
         listaMiembros.forEach(m => {
             const sels = asignaciones[m];
             const fila = { "Participante": m };
-            for (let b = 1; b <= config.seleccionesPorParticipante; b++) {
-                const sel = sels.find(s => s.bombo === b);
-                fila[titulosBombos[b - 1]] = sel ? `${sel.nombre} (${sel.grupo})` : "";
+            for (let r = 1; r <= config.seleccionesPorParticipante; r++) {
+                const sel = sels.find(s => s.ronda === r);
+                fila[`Selección ${r}${sel ? ` (B${sel.bombo})` : ""}`] = sel ? `${sel.nombre} (${sel.grupo})` : "";
             }
             datosExcel.push(fila);
         });
