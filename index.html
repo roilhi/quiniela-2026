@@ -379,7 +379,6 @@
         for (let r = 0; r < config.seleccionesPorParticipante; r++) {
             barajar(listaMiembros).forEach(m => colaSorteo.push(m));
         }
-        colaSorteo = barajar(colaSorteo);
     }
 
     function obtenerBomboIdeal(numSeleccion) {
@@ -402,6 +401,24 @@
         return cuenta;
     }
 
+    function bombosConCupoDisponible(cuenta, meta) {
+        const bombos = [];
+        for (let b = 1; b <= NUM_BOMBOS; b++) {
+            if (cuenta[b] < meta[b]) bombos.push(b);
+        }
+        return bombos;
+    }
+
+    function ordenarBombosPorPrioridad(bombos, bomboIdeal, cuenta, meta) {
+        return [...bombos].sort((a, b) => {
+            if (a === bomboIdeal && b !== bomboIdeal) return -1;
+            if (b === bomboIdeal && a !== bomboIdeal) return 1;
+            const deficitA = meta[a] - cuenta[a];
+            const deficitB = meta[b] - cuenta[b];
+            return deficitB - deficitA;
+        });
+    }
+
     function obtenerCandidatosCompatibles(gruposOcupados, bomboFiltro = null) {
         const candidatos = [];
         for (let b = 1; b <= NUM_BOMBOS; b++) {
@@ -415,25 +432,28 @@
         return candidatos;
     }
 
-    function filtrarMenosCargados(candidatos, cuenta) {
-        const minCuenta = Math.min(...candidatos.map(c => cuenta[c.bombo]));
-        return candidatos.filter(c => cuenta[c.bombo] === minCuenta);
-    }
-
-    function obtenerCandidatosEquitativos(miembro, gruposOcupados, numSeleccion) {
-        const bomboIdeal = obtenerBomboIdeal(numSeleccion);
-        const delBomboIdeal = obtenerCandidatosCompatibles(gruposOcupados, bomboIdeal);
-        if (delBomboIdeal.length > 0) return delBomboIdeal;
-
-        const todos = obtenerCandidatosCompatibles(gruposOcupados);
-        if (todos.length === 0) return [];
-
+    function buscarCandidatoEquitativo(miembro, gruposOcupados, numSeleccion, respetarGrupos = true) {
         const cuenta = contarBombosParticipante(miembro);
         const meta = metaPorBombo();
-        const bajoMeta = todos.filter(c => cuenta[c.bombo] < meta[c.bombo]);
-        if (bajoMeta.length > 0) return filtrarMenosCargados(bajoMeta, cuenta);
+        const bomboIdeal = obtenerBomboIdeal(numSeleccion);
+        const bombosDisponibles = ordenarBombosPorPrioridad(
+            bombosConCupoDisponible(cuenta, meta), bomboIdeal, cuenta, meta
+        );
 
-        return filtrarMenosCargados(todos, cuenta);
+        for (const bombo of bombosDisponibles) {
+            const pool = bombosActivos[bombo];
+            const indices = [];
+            pool.forEach((equipo, i) => {
+                if (!respetarGrupos || !gruposOcupados.includes(equipo.grupo)) {
+                    indices.push(i);
+                }
+            });
+            if (indices.length > 0) {
+                const index = indices[Math.floor(Math.random() * indices.length)];
+                return { bombo, index, equipo: pool[index] };
+            }
+        }
+        return null;
     }
 
     function renderizarCuadricula() {
@@ -472,28 +492,19 @@
         const gruposOcupadosPorMiembro = asignaciones[miembroSuertudo].map(s => s.grupo);
         const numSeleccion = asignaciones[miembroSuertudo].length + 1;
 
-        let candidatos = obtenerCandidatosEquitativos(miembroSuertudo, gruposOcupadosPorMiembro, numSeleccion);
+        let elegido = buscarCandidatoEquitativo(miembroSuertudo, gruposOcupadosPorMiembro, numSeleccion, true);
 
-        if (candidatos.length === 0) {
-            const restantes = obtenerCandidatosCompatibles(gruposOcupadosPorMiembro);
-            if (restantes.length === 0) {
-                const ultimoRecurso = [];
-                for (let b = 1; b <= NUM_BOMBOS; b++) {
-                    bombosActivos[b].forEach((equipo, i) => ultimoRecurso.push({ bombo: b, index: i, equipo }));
-                }
-                if (ultimoRecurso.length === 0) {
-                    document.getElementById("status-text").innerHTML =
-                        `⚠️ <strong>Error:</strong> No quedan equipos disponibles. Sorteo detenido (${contarSeleccionesTotales()}/${TOTAL_SELECCIONES}).`;
-                    document.getElementById("btn-sortear").disabled = true;
-                    return;
-                }
-                candidatos = filtrarMenosCargados(ultimoRecurso, contarBombosParticipante(miembroSuertudo));
-            } else {
-                candidatos = filtrarMenosCargados(restantes, contarBombosParticipante(miembroSuertudo));
-            }
+        if (!elegido) {
+            elegido = buscarCandidatoEquitativo(miembroSuertudo, gruposOcupadosPorMiembro, numSeleccion, false);
         }
 
-        const elegido = candidatos[Math.floor(Math.random() * candidatos.length)];
+        if (!elegido) {
+            document.getElementById("status-text").innerHTML =
+                `⚠️ <strong>Error:</strong> No hay equipos disponibles respetando la cuota equitativa de bombos. Sorteo detenido (${contarSeleccionesTotales()}/${TOTAL_SELECCIONES}).`;
+            document.getElementById("btn-sortear").disabled = true;
+            return;
+        }
+
         const seleccionada = bombosActivos[elegido.bombo].splice(elegido.index, 1)[0];
 
         asignaciones[miembroSuertudo].push({
