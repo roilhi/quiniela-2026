@@ -382,9 +382,30 @@
         colaSorteo = barajar(colaSorteo);
     }
 
-    function obtenerCandidatosCompatibles(gruposOcupados) {
+    function obtenerBomboIdeal(numSeleccion) {
+        return ((numSeleccion - 1) % NUM_BOMBOS) + 1;
+    }
+
+    function metaPorBombo() {
+        const meta = {};
+        const base = Math.floor(config.seleccionesPorParticipante / NUM_BOMBOS);
+        const extra = config.seleccionesPorParticipante % NUM_BOMBOS;
+        for (let b = 1; b <= NUM_BOMBOS; b++) {
+            meta[b] = base + (b <= extra ? 1 : 0);
+        }
+        return meta;
+    }
+
+    function contarBombosParticipante(miembro) {
+        const cuenta = { 1: 0, 2: 0, 3: 0, 4: 0 };
+        asignaciones[miembro].forEach(s => cuenta[s.bombo]++);
+        return cuenta;
+    }
+
+    function obtenerCandidatosCompatibles(gruposOcupados, bomboFiltro = null) {
         const candidatos = [];
         for (let b = 1; b <= NUM_BOMBOS; b++) {
+            if (bomboFiltro !== null && b !== bomboFiltro) continue;
             bombosActivos[b].forEach((equipo, i) => {
                 if (!gruposOcupados.includes(equipo.grupo)) {
                     candidatos.push({ bombo: b, index: i, equipo });
@@ -392,6 +413,27 @@
             });
         }
         return candidatos;
+    }
+
+    function filtrarMenosCargados(candidatos, cuenta) {
+        const minCuenta = Math.min(...candidatos.map(c => cuenta[c.bombo]));
+        return candidatos.filter(c => cuenta[c.bombo] === minCuenta);
+    }
+
+    function obtenerCandidatosEquitativos(miembro, gruposOcupados, numSeleccion) {
+        const bomboIdeal = obtenerBomboIdeal(numSeleccion);
+        const delBomboIdeal = obtenerCandidatosCompatibles(gruposOcupados, bomboIdeal);
+        if (delBomboIdeal.length > 0) return delBomboIdeal;
+
+        const todos = obtenerCandidatosCompatibles(gruposOcupados);
+        if (todos.length === 0) return [];
+
+        const cuenta = contarBombosParticipante(miembro);
+        const meta = metaPorBombo();
+        const bajoMeta = todos.filter(c => cuenta[c.bombo] < meta[c.bombo]);
+        if (bajoMeta.length > 0) return filtrarMenosCargados(bajoMeta, cuenta);
+
+        return filtrarMenosCargados(todos, cuenta);
     }
 
     function renderizarCuadricula() {
@@ -430,20 +472,25 @@
         const gruposOcupadosPorMiembro = asignaciones[miembroSuertudo].map(s => s.grupo);
         const numSeleccion = asignaciones[miembroSuertudo].length + 1;
 
-        let candidatos = obtenerCandidatosCompatibles(gruposOcupadosPorMiembro);
+        let candidatos = obtenerCandidatosEquitativos(miembroSuertudo, gruposOcupadosPorMiembro, numSeleccion);
 
         if (candidatos.length === 0) {
-            const restantes = [];
-            for (let b = 1; b <= NUM_BOMBOS; b++) {
-                bombosActivos[b].forEach((equipo, i) => restantes.push({ bombo: b, index: i, equipo }));
-            }
+            const restantes = obtenerCandidatosCompatibles(gruposOcupadosPorMiembro);
             if (restantes.length === 0) {
-                document.getElementById("status-text").innerHTML =
-                    `⚠️ <strong>Error:</strong> No quedan equipos disponibles. Sorteo detenido (${contarSeleccionesTotales()}/${TOTAL_SELECCIONES}).`;
-                document.getElementById("btn-sortear").disabled = true;
-                return;
+                const ultimoRecurso = [];
+                for (let b = 1; b <= NUM_BOMBOS; b++) {
+                    bombosActivos[b].forEach((equipo, i) => ultimoRecurso.push({ bombo: b, index: i, equipo }));
+                }
+                if (ultimoRecurso.length === 0) {
+                    document.getElementById("status-text").innerHTML =
+                        `⚠️ <strong>Error:</strong> No quedan equipos disponibles. Sorteo detenido (${contarSeleccionesTotales()}/${TOTAL_SELECCIONES}).`;
+                    document.getElementById("btn-sortear").disabled = true;
+                    return;
+                }
+                candidatos = filtrarMenosCargados(ultimoRecurso, contarBombosParticipante(miembroSuertudo));
+            } else {
+                candidatos = filtrarMenosCargados(restantes, contarBombosParticipante(miembroSuertudo));
             }
-            candidatos = restantes;
         }
 
         const elegido = candidatos[Math.floor(Math.random() * candidatos.length)];
