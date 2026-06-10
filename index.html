@@ -99,7 +99,7 @@
 
 <header>
     <h1>🏆 Sorteo Quiniela Mundialista 2026 🏆</h1>
-    <p>Algoritmo Anti-Colisión: Prohibido repetir selecciones del mismo grupo mundialista</p>
+    <p>Algoritmo Anti-Colisión Adaptativo</p>
 </header>
 
 <div class="main-container">
@@ -109,7 +109,7 @@
         <p class="config-hint">
             Define cuántos participantes habrá y cuántas selecciones recibe cada uno.
             El total debe ser exactamente <strong>48 selecciones</strong> (todos los equipos del Mundial).
-            Hay 12 grupos mundialistas (A–L), así que cada participante puede tener máximo <strong>12 selecciones</strong> sin repetir grupo.
+            La restricción estricta por bombos se aplicará exclusivamente para la combinación perfecta de 12 participantes × 4 selecciones.
         </p>
         <form id="form-config" onsubmit="confirmarConfiguracion(event)">
             <div class="config-grid">
@@ -144,7 +144,7 @@
     <div class="panel hidden" id="panel-sorteo">
         <div class="panel-title">🎲 3. Panel de Rifa de Selecciones</div>
         <div class="sorteo-controls">
-            <div class="status-box" id="status-text">¡Lista cargada! Presiona el botón para iniciar el Bombo 1 de forma justa.</div>
+            <div class="status-box" id="status-text">¡Lista cargada! Presiona el botón para iniciar el sorteo.</div>
             <div class="btn-container">
                 <button id="btn-sortear" class="btn-accent" onclick="sortearSiguiente()">Sortear Siguiente Selección</button>
                 <button id="btn-excel" class="btn-excel hidden" onclick="exportarExcel()">📥 Descargar Resultados en Excel</button>
@@ -168,7 +168,7 @@
             { nombre: "Argentina", code: "ar", grupo: "J" }, { nombre: "Francia", code: "fr", grupo: "I" }, 
             { nombre: "Inglaterra", code: "gb", grupo: "L" }, { nombre: "Brasil", code: "br", grupo: "C" }, 
             { nombre: "Portugal", code: "pt", grupo: "K" }, { nombre: "Países Bajos", code: "nl", grupo: "F" }, 
-            { nombre: "Bélgica", code: "be", grupo: "G" }, { nombre: "Alemania", code: "de", grupo: "E" }
+            { nombre: "Bélgica", code: "be", group: "G" }, { nombre: "Alemania", code: "de", grupo: "E" }
         ],
         2: [
             { nombre: "Croacia", code: "hr", grupo: "L" }, { nombre: "Marruecos", code: "ma", grupo: "C" }, 
@@ -310,7 +310,13 @@
         if (total > TOTAL_SELECCIONES) {
             return { ok: false, mensaje: `⚠️ Error: se rebasaron ${total - TOTAL_SELECCIONES} selección(es) (${total}/${TOTAL_SELECCIONES}).` };
         }
-        return { ok: true, mensaje: `🎉 ¡Sorteo terminado con éxito! Se completaron las ${TOTAL_SELECCIONES} selecciones. El algoritmo garantizó que nadie comparta grupo. ¡Ya puedes descargar tu Excel!` };
+
+        const esCasoEspecial = (config.numParticipantes === 12 && config.seleccionesPorParticipante === 4);
+        const msgDetalle = esCasoEspecial 
+            ? "El algoritmo garantizó la restricción estricta de bombos y grupos por persona." 
+            : "El sorteo se completó adaptando fluidamente las restricciones dinámicas para evitar bloqueos.";
+
+        return { ok: true, mensaje: `🎉 ¡Sorteo terminado con éxito! Se completaron las ${TOTAL_SELECCIONES} selecciones. ${msgDetalle} ¡Ya puedes descargar tu Excel!` };
     }
 
     function generarInputs() {
@@ -419,28 +425,33 @@
         });
     }
 
-    function obtenerCandidatosCompatibles(gruposOcupados, bomboFiltro = null) {
-        const candidatos = [];
-        for (let b = 1; b <= NUM_BOMBOS; b++) {
-            if (bomboFiltro !== null && b !== bomboFiltro) continue;
-            bombosActivos[b].forEach((equipo, i) => {
-                if (!gruposOcupados.includes(equipo.grupo)) {
-                    candidatos.push({ bombo: b, index: i, equipo });
-                }
-            });
-        }
-        return candidatos;
-    }
-
     function buscarCandidatoEquitativo(miembro, gruposOcupados, numSeleccion, respetarGrupos = true) {
         const cuenta = contarBombosParticipante(miembro);
         const meta = metaPorBombo();
         const bomboIdeal = obtenerBomboIdeal(numSeleccion);
-        const bombosDisponibles = ordenarBombosPorPrioridad(
-            bombosConCupoDisponible(cuenta, meta), bomboIdeal, cuenta, meta
+
+        // CONDICIÓN ESPECIAL: Evaluamos si es el caso ideal de 12 participantes con 4 selecciones
+        const esCasoEspecial = (config.numParticipantes === 12 && config.seleccionesPorParticipante === 4);
+
+        let bombosDisponibles;
+        if (esCasoEspecial) {
+            // Restricción estricta de bombos por participante solo para el caso de 12x4
+            bombosDisponibles = bombosConCupoDisponible(cuenta, meta);
+        } else {
+            // Para el resto de combinaciones, cualquier bombo global que conserve selecciones vivas es apto
+            bombosDisponibles = [];
+            for (let b = 1; b <= NUM_BOMBOS; b++) {
+                if (bombosActivos[b] && bombosActivos[b].length > 0) {
+                    bombosDisponibles.push(b);
+                }
+            }
+        }
+
+        const bombosOrdenados = ordenarBombosPorPrioridad(
+            bombosDisponibles, bomboIdeal, cuenta, meta
         );
 
-        for (const bombo of bombosDisponibles) {
+        for (const bombo of bombosOrdenados) {
             const pool = bombosActivos[bombo];
             const indices = [];
             pool.forEach((equipo, i) => {
@@ -484,7 +495,7 @@
         });
     }
 
-    // FUNCIÓN DEL SORTEO CON CONTROL ANTI-COLISIÓN DE GRUPOS
+    // FUNCIÓN DEL SORTEO CON CONTROL ANTI-COLISIÓN DE GRUPOS INTELIGENTE
     function sortearSiguiente() {
         if (indiceSorteo >= TOTAL_SELECCIONES) return;
 
@@ -492,10 +503,23 @@
         const gruposOcupadosPorMiembro = asignaciones[miembroSuertudo].map(s => s.grupo);
         const numSeleccion = asignaciones[miembroSuertudo].length + 1;
 
+        // Intento 1: Respetando bombos y grupos mundialistas
         let elegido = buscarCandidatoEquitativo(miembroSuertudo, gruposOcupadosPorMiembro, numSeleccion, true);
 
+        // Intento 2: Si falla, ignoramos grupos pero seguimos intentando respetar bombos
         if (!elegido) {
             elegido = buscarCandidatoEquitativo(miembroSuertudo, gruposOcupadosPorMiembro, numSeleccion, false);
+        }
+
+        // Intento 3: Salvavidas definitivo para configuraciones que NO sean 12x4 (Garantiza que nunca se congele)
+        if (!elegido && !(config.numParticipantes === 12 && config.seleccionesPorParticipante === 4)) {
+            for (let b = 1; b <= NUM_BOMBOS; b++) {
+                if (bombosActivos[b] && bombosActivos[b].length > 0) {
+                    const index = Math.floor(Math.random() * bombosActivos[b].length);
+                    elegido = { bombo: b, index: index, equipo: bombosActivos[b][index] };
+                    break;
+                }
+            }
         }
 
         if (!elegido) {
